@@ -1,0 +1,372 @@
+import gym
+from gym import spaces
+import numpy as np
+import pandas as pd
+import random
+
+class BitcoinTradingEnv(gym.Env):
+    def __init__(self, data, initial_cash=1000000):
+        super(BitcoinTradingEnv, self).__init__()
+        
+        self.data = data
+        self.initial_cash = initial_cash
+        self.current_step = 0
+        self.cash = initial_cash
+        self.bitcoin_held = 0
+        self.total_value = self.cash
+        
+        # Define action and state space
+        # Actions: 0 = hold, 1 = buy, 2 = sell
+        self.action_space = spaces.Discrete(3)
+        
+        # State: [price, volume, cash, bitcoin_held]
+        self.observation_space = spaces.Box(low=0, high=np.inf, shape=(4,), dtype=np.float32)
+
+    def reset(self):
+        self.current_step = 0
+        self.cash = self.initial_cash
+        self.bitcoin_held = 0
+        self.total_value = self.cash
+        return self._next_observation()
+
+    def _next_observation(self):
+        current_data = self.data.iloc[self.current_step]
+        return np.array([current_data['Close'], current_data['Volume'], self.cash, self.bitcoin_held])
+
+    def step(self, action):
+        current_data = self.data.iloc[self.current_step]
+        current_price = current_data['Close']
+        
+        if action == 1:  # Buy
+            if self.cash >= current_price:
+                self.bitcoin_held += 1
+                self.cash -= current_price
+        elif action == 2:  # Sell
+            if self.bitcoin_held > 0:
+                self.bitcoin_held -= 1
+                self.cash += current_price
+        
+        # Update total portfolio value
+        self.total_value = self.cash + self.bitcoin_held * current_price
+        
+        self.current_step += 1
+        done = False
+        if self.current_step >= len(self.data) - 1:
+            done = True
+        
+        reward = self.total_value - (self.cash + self.bitcoin_held * current_price)
+        
+        return self._next_observation(), reward, done, {}
+
+    def render(self):
+        print(f"Step: {self.current_step}, Cash: {self.cash}, Bitcoin Held: {self.bitcoin_held}, Total Value: {self.total_value}")
+
+import numpy as np
+import pandas as pd
+
+# Load the Bitcoin data
+data = pd.read_csv( r"C:\Users\TOSHIBA\Documents\projeck data analis\bitcoint/bitcoin_price_Training - Training.csv")
+
+# Preprocess the data
+data['Date'] = pd.to_datetime(data['Date'])
+data.set_index('Date', inplace=True)
+data['Returns'] = data['Close'].pct_change()
+
+# Initial cash
+initial_cash = 1_000_000
+cash = initial_cash
+bitcoin_amount = 0
+
+# State space: we use Close, Volume, Market Cap for simplicity
+state = data[['Close', 'Volume', 'Market Cap']].values
+
+# Action space: 0 -> Hold, 1 -> Buy, 2 -> Sell
+actions = [0, 1, 2]
+
+# Reward function
+def get_reward(action, current_price, next_price, cash, bitcoin_amount):
+    if action == 1:  # Buy
+        if cash >= current_price:
+            bitcoin_amount += cash // current_price
+            cash -= bitcoin_amount * current_price
+    elif action == 2:  # Sell
+        if bitcoin_amount > 0:
+            cash += bitcoin_amount * current_price
+            bitcoin_amount = 0
+    
+    # Calculate the reward (simplified as change in portfolio value)
+    reward = cash + bitcoin_amount * current_price - initial_cash
+    return reward, cash, bitcoin_amount
+
+# Example of simulation for one step
+for i in range(1, len(data)-1):  # Skip first row (no previous data for return calculation)
+    current_price = data['Close'].iloc[i]
+    next_price = data['Close'].iloc[i+1]
+    
+    # Random action selection for now (you will replace this with your model)
+    action = np.random.choice(actions)
+    
+    reward, cash, bitcoin_amount = get_reward(action, current_price, next_price, cash, bitcoin_amount)
+    
+    # For now, just print the result of the action and reward
+    print(f"Day {i}, Action: {action}, Reward: {reward}, Cash: {cash}, Bitcoin Amount: {bitcoin_amount}")
+
+# Final portfolio value
+final_value = cash + bitcoin_amount * data['Close'].iloc[-1]
+print(f"Final Portfolio Value: {final_value}")
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Load the CSV file with Bitcoin data
+# Replace 'bitcoin_prices.csv' with your actual file path
+data = pd.read_csv( r'C:\Users\TOSHIBA\Documents\projeck data analis\bitcoint/bitcoin_price_Training - Training.csv', parse_dates=['Date'], index_col='Date')
+
+# Define initial cash and portfolio
+initial_cash = 1_000_000  # $1 million
+cash = initial_cash
+bitcoin_amount = 0
+
+# Simulate the trading process
+portfolio_values = []
+
+# Start by buying Bitcoin at the first price
+for i in range(1, len(data)):
+    current_price = data['Close'].iloc[i-1]
+    
+    # Buy Bitcoin at the first price point with all available cash
+    if i == 1:
+        bitcoin_amount = cash / current_price  # Buy Bitcoin at the first price point
+        cash = 0  # Cash is spent to buy Bitcoin
+    
+    # Track portfolio value over time
+    portfolio_value = cash + bitcoin_amount * data['Close'].iloc[i]
+    portfolio_values.append(portfolio_value)
+
+# Add the initial portfolio value (1 million USD)
+portfolio_values.insert(0, initial_cash)
+
+# Plot portfolio value over time with USD symbol
+plt.figure(figsize=(10, 6))
+plt.plot(data.index, portfolio_values, label='Portfolio Value', linewidth=1)
+plt.xlabel('Date')
+plt.ylabel('(USD)')
+plt.title('History Bitcoint Price')
+plt.legend()
+plt.grid(True)
+
+# Format the Y-axis to show USD symbol
+plt.gca().get_yaxis().set_major_formatter(plt.matplotlib.ticker.FuncFormatter(lambda x, loc: "$%1.0f" % x))
+
+plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
+plt.tight_layout()  # Adjust layout for better fit
+plt.show()
+
+# Print the final portfolio value
+final_value = portfolio_values[-1]
+print(f"Final Portfolio Value: ${final_value:,.2f}")
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Define initial cash and portfolio
+initial_cash = 1_000_000  # $1 million
+cash = initial_cash
+bitcoin_amount = 0
+
+# Simulate Bitcoin prices (this data should be replaced with real data)
+dates = pd.date_range(start='2023-01-01', end='2030-01-01', freq='D')
+prices = np.linspace(20000, 100000, len(dates))  # Simulated Bitcoin prices from $20,000 to $100,000
+
+# Create a DataFrame
+data = pd.DataFrame({'Date': dates, 'Close': prices})
+data.set_index('Date', inplace=True)
+
+# Initialize portfolio tracking
+portfolio_values = [initial_cash]
+portfolio_returns = []
+
+# Trading strategy simulation
+for i in range(1, len(data)):
+    current_price = data['Close'].iloc[i-1]
+    
+    # Buy Bitcoin at the first price point with all available cash
+    if i == 1:
+        bitcoin_amount = cash / current_price  # Buy Bitcoin at the first price point
+        cash = 0  # Cash is spent to buy Bitcoin
+    
+    # Track portfolio value over time
+    portfolio_value = cash + bitcoin_amount * data['Close'].iloc[i]
+    portfolio_values.append(portfolio_value)
+
+    # Calculate daily returns
+    if len(portfolio_values) > 1:
+        daily_return = (portfolio_value - portfolio_values[-2]) / portfolio_values[-2]
+        portfolio_returns.append(daily_return)
+
+# Calculate Evaluation Metrics
+final_value = portfolio_values[-1]
+
+# Cumulative Return
+cumulative_return = (final_value - initial_cash) / initial_cash * 100
+
+# Sharpe Ratio
+mean_return = np.mean(portfolio_returns)
+std_dev = np.std(portfolio_returns)
+sharpe_ratio = mean_return / std_dev if std_dev != 0 else 0
+
+# Max Drawdown
+peak = np.max(portfolio_values)
+drawdown = np.min(portfolio_values)
+max_drawdown = (peak - drawdown) / peak * 100
+
+# Plot portfolio value over time
+plt.figure(figsize=(10, 6))
+plt.plot(data.index, portfolio_values, label='Portfolio Value', linewidth=1)
+plt.xlabel('Date')
+plt.ylabel('Portfolio Value (USD)')
+plt.title('Portfolio Value Over Time (Bitcoin Trading)')
+plt.legend()
+plt.grid(True)
+plt.gca().get_yaxis().set_major_formatter(plt.matplotlib.ticker.FuncFormatter(lambda x, loc: "$%1.0f" % x))
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+# Print Evaluation Metrics
+print(f"Cumulative Return: {cumulative_return:.2f}%")
+print(f"Sharpe Ratio: {sharpe_ratio:.2f}")
+print(f"Max Drawdown: {max_drawdown:.2f}%")
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Load the Bitcoin data
+data = pd.read_csv(r"C:\Users\TOSHIBA\Documents\projeck data analis\bitcoint/bitcoin_price_Training - Training.csv")
+
+# Preprocess the data
+data['Date'] = pd.to_datetime(data['Date'])
+data.set_index('Date', inplace=True)
+
+# Initial cash in dollars
+initial_cash = 1_000_000
+
+# Get the price of Bitcoin on the first day
+initial_price = data['Close'].iloc[0]
+
+# Calculate how many Bitcoins can be bought with initial cash
+bitcoins_bought = initial_cash / initial_price
+
+# List to store the portfolio value over time
+portfolio_values = []
+
+# Calculate portfolio value over time
+for i in range(len(data)):
+    current_price = data['Close'].iloc[i]
+    portfolio_value = bitcoins_bought * current_price  # Value of the portfolio at time i
+    portfolio_values.append(portfolio_value)
+
+# Add portfolio values to the data
+data['Portfolio Value'] = portfolio_values
+
+# Plot the portfolio value over time
+plt.figure(figsize=(10, 6))
+plt.plot(data.index, data['Portfolio Value'], label='Portfolio Value (USD)', color='green', linewidth=1)
+plt.xlabel('Date')
+plt.ylabel('Portfolio Value (USD)')
+plt.title('Bitcoin Portfolio Value Over Time (1 Million Initial Investment)')
+plt.legend()
+plt.grid(True)
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+# Final portfolio value at the end of the period
+final_portfolio_value = portfolio_values[-1]
+print(f"Initial Investment: $1,000,000")
+print(f"Number of Bitcoins bought initially: {bitcoins_bought:.6f} BTC")
+print(f"Final Portfolio Value: ${final_portfolio_value:,.2f}")
+
+!pip install lightgbm
+
+import lightgbm as lgb
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error
+
+# Memisahkan data menjadi fitur (X) dan target (y)
+X = data[['Year', 'Month', 'Day']]
+y = data['Close']
+
+# Membagi data menjadi training dan testing
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Membuat model LightGBM
+lgb_model = lgb.LGBMRegressor()
+lgb_model.fit(X_train, y_train)
+
+# Prediksi harga Bitcoin
+y_pred = lgb_model.predict(X_test)
+
+# Menghitung error model
+mae = mean_absolute_error(y_test, y_pred)
+print(f'Mean Absolute Error: {mae}')
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+from datetime import timedelta
+
+# Load the Bitcoin data
+data = pd.read_csv(r"C:\Users\TOSHIBA\Documents\projeck data analis\bitcoint/bitcoin_price_Training - Training.csv")
+
+# Preprocess the data
+data['Date'] = pd.to_datetime(data['Date'])
+data.set_index('Date', inplace=True)
+
+# Cek nilai yang hilang dan isi dengan interpolasi
+data['Close'] = data['Close'].interpolate(method='linear')
+
+# Convert dates into numerical values (days since the first day)
+data['Days'] = (data.index - data.index[0]).days
+
+# Train a Linear Regression model
+X = data[['Days']]  # Feature (Days)
+y = data['Close']   # Target (Price)
+
+# Split the data into training and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+
+# Initialize and train the model
+model = LinearRegression()
+model.fit(X_train, y_train)
+
+# Make predictions for the next years (until 2030)
+future_days = np.array([data['Days'].max() + i for i in range(1, (2030 - data.index.year[-1]) * 365 + 1)]).reshape(-1, 1)
+future_prices = model.predict(future_days)
+
+# Plot the original data and the predicted future data
+future_dates = pd.date_range(start=data.index[-1] + timedelta(days=1), periods=len(future_prices), freq='D')
+
+plt.figure(figsize=(10, 6))
+plt.plot(data.index, data['Close'], label='Actual Price', color='blue', linewidth=1)
+plt.plot(future_dates, future_prices, label='Predicted Price', color='red', linestyle='--', linewidth=1)
+plt.xlabel('Date')
+plt.ylabel('Bitcoin Price (USD)')
+plt.title('Bitcoin Price Prediction (Up to 2030)')
+plt.legend()
+plt.grid(True)
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+# Final predicted price in 2030
+final_predicted_price = future_prices[-1]
+final_portfolio_value_2030 = bitcoins_bought * final_predicted_price
+
+print(f"Predicted Bitcoin Price in 2030: ${final_predicted_price:,.2f}")
+print(f"Predicted Portfolio Value in 2030: ${final_portfolio_value_2030:,.2f}")
